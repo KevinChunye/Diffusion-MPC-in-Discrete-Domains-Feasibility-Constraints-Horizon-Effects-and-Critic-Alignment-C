@@ -1,0 +1,59 @@
+# macOS / OS noise
+.DS_Store
+Thumbs.db
+
+# Python caches / build artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.dylib
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+build/
+dist/
+
+# Virtualenvs / local env files
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# IDE/editor
+.vscode/
+.idea/
+
+# Logs / temp
+*.log
+tmp/
+temp/
+
+# Large model/data artifacts
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.onnx
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.zip
+
+# Generated media
+*.gif
+*.mp4
+*.webm
+
+# Project run artifacts
+runs/
+datasets/
+checkpoints/
+
+# Lightning runtime/cache artifacts
+.lightning/
+.lightning_studio/
+

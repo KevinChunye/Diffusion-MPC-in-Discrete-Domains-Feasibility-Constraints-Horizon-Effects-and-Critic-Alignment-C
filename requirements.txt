@@ -1,0 +1,6 @@
+numpy
+torch
+gymnasium
+imageio==2.34.0
+pygame
+PyYAML

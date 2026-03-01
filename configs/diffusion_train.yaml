@@ -1,0 +1,13 @@
+dataset_path: datasets/expert_v1/sequences_H8.npz
+horizon: 8
+epochs: 10
+batch_size: 256
+lr: 0.0003
+mask_prob: 0.5
+d_model: 128
+layers: 4
+heads: 4
+device: cuda
+seed: 0
+output_dir: runs/diffusion_train_default
+save: ""

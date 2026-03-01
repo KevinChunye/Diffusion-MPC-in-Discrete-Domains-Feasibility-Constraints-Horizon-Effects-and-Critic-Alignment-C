@@ -1,0 +1,14 @@
+episodes: 100
+max_steps: 2000
+width: 10
+height: 20
+beam_width: 16
+horizon: 3
+seed: 0
+run_name: beam_search_eval
+output_dir: runs/beam_eval_default
+record_video: false
+video_episodes: 1
+video_max_steps: 200
+video_format: gif
+video_select: first
