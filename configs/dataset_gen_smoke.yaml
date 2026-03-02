@@ -1,0 +1,15 @@
+episodes: 5
+seed: 0
+out_dir: datasets/expert_smoke
+teacher: heuristic
+max_steps_per_episode: 100
+width: 10
+height: 20
+device: cpu
+top_episode_pct: 0.50
+advantage_quantile: 0.0
+board_health: false
+min_steps_per_episode: 1
+horizon: 8
+stride: 1
+output_dir: runs/dataset_smoke

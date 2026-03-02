@@ -1,0 +1,16 @@
+episodes: 20000
+seed: 0
+out_dir: datasets/expert_v1
+teacher: dqn
+dqn_ckpt: /teamspace/studios/this_studio/tetris_artifacts/checkpoints/dqn_updated.pt
+max_steps_per_episode: 1000
+width: 10
+height: 20
+device: cuda
+top_episode_pct: 0.10
+advantage_quantile: 0.80
+board_health: true
+min_steps_per_episode: 1
+horizon: 8
+stride: 1
+output_dir: runs/dataset_gen_dqn_lightning

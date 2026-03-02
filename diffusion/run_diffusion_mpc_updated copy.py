@@ -53,8 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sample_steps", type=int, default=8)
     p.add_argument("--temperature", type=float, default=1.0)
     p.add_argument("--sampling_constraints", type=str, default="none", choices=["none", "mask_logits"])
-    p.add_argument("--rerank_mode", type=str, default="heuristic", choices=["heuristic", "dqn","hybrid"])
-    p.add_argument("--critic_weight", type=float, default=0.0)
+    p.add_argument("--rerank_mode", type=str, default="heuristic", choices=["heuristic", "dqn"])
     p.add_argument("--critic_ckpt", type=str, default="dqn_updated.pt")
     p.add_argument("--invalid_handling", type=str, default="none", choices=["none", "penalize", "resample"])
     p.add_argument("--invalid_penalty", type=float, default=1e6)
@@ -153,22 +152,6 @@ def _run_episode(env, planner, max_steps: int, run_name: str, ep_num: int, decis
     }
 
 
-# def run_eval(args: argparse.Namespace) -> dict:
-#     if not args.ckpt:
-#         raise ValueError("--ckpt is required")
-
-#     np.random.seed(args.seed)
-#     torch.manual_seed(args.seed)
-#     artifacts = prepare_run_artifacts(args.output_dir, vars(args).copy())
-
-#     device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
-
-#     # build model
-#     model = PlanDenoiser(board_h=args.height, board_w=args.width, horizon=args.horizon).to(device)
-#     ckpt = torch.load(args.ckpt, map_location=device, weights_only=False)
-#     # model.load_state_dict(ckpt["state_dict"])
-    
-#     model.eval()
 def run_eval(args: argparse.Namespace) -> dict:
     if not args.ckpt:
         raise ValueError("--ckpt is required")
@@ -182,33 +165,12 @@ def run_eval(args: argparse.Namespace) -> dict:
     # build model
     model = PlanDenoiser(board_h=args.height, board_w=args.width, horizon=args.horizon).to(device)
     ckpt = torch.load(args.ckpt, map_location=device, weights_only=False)
-
-    # --- load ckpt with horizon-mismatch handling for positional embedding ---
-    sd = ckpt["state_dict"]
-
-    # PlanDenoiser uses a learned positional embedding of length (horizon + 1).
-    # If eval horizon differs from training horizon, pos_emb.weight shape will mismatch.
-    if "pos_emb.weight" in sd and hasattr(model, "pos_emb"):
-        ckpt_pe = sd["pos_emb.weight"]
-        cur_pe = model.pos_emb.weight
-
-        if ckpt_pe.shape != cur_pe.shape:
-            # If checkpoint has MORE positions (e.g., trained horizon 8 => 9) than current (horizon 4 => 5),
-            # slice the first positions. If checkpoint has fewer, pad by repeating the last row.
-            if ckpt_pe.shape[0] > cur_pe.shape[0]:
-                sd["pos_emb.weight"] = ckpt_pe[: cur_pe.shape[0]].clone()
-            else:
-                pad = cur_pe.shape[0] - ckpt_pe.shape[0]
-                last = ckpt_pe[-1:].repeat(pad, 1)
-                sd["pos_emb.weight"] = torch.cat([ckpt_pe, last], dim=0)
-
-    # strict=False so any non-critical mismatches don't hard-fail
-    model.load_state_dict(sd, strict=False)
-
-    model.eval()
+    # model.load_state_dict(ckpt["state_dict"])
     
+    model.eval()
+
     critic = None
-    if args.rerank_mode in {"dqn", "hybrid"}:
+    if args.rerank_mode == "dqn":
         critic = DQNCritic(
             ckpt_path=args.critic_ckpt,
             board_h=args.height,
@@ -223,12 +185,10 @@ def run_eval(args: argparse.Namespace) -> dict:
         temperature=args.temperature,
         sampling_constraints=args.sampling_constraints,
         rerank_mode=args.rerank_mode,
-        critic_weight=float(args.critic_weight),
         invalid_handling=args.invalid_handling,
         invalid_penalty=args.invalid_penalty,
         resample_retries=args.resample_retries,
     )
-
     planner = DiffusionMPCPlanner(model, cfg, device=device, critic=critic)
 
     env = TetrisGym(width=args.width, height=args.height, max_steps=args.max_steps, render_mode="skip")

@@ -24,7 +24,8 @@ class PlannerCfg:
     sample_steps: int = 8
     temperature: float = 1.0
     sampling_constraints: str = "none"  # none | mask_logits
-    rerank_mode: str = "heuristic"      # heuristic | dqn
+    rerank_mode: str = "heuristic"      # heuristic | dqn | hybrid
+    critic_weight: float = 0.0          # used when rerank_mode == "hybrid"
     invalid_handling: str = "none"      # none | penalize | resample
     invalid_penalty: float = 1e6
     resample_retries: int = 3
@@ -95,12 +96,14 @@ class DiffusionMPCPlanner:
     def _score_board(self, sim_env) -> float:
         if self.cfg.rerank_mode == "heuristic":
             return heuristic_score_board(sim_env.game.board)
-        if self.cfg.rerank_mode == "dqn":
+
+        if self.cfg.rerank_mode in {"dqn", "hybrid"}:
             if self.critic is None:
-                raise ValueError("rerank_mode='dqn' requires a loaded critic")
+                raise ValueError("rerank_mode='dqn'/'hybrid' requires a loaded critic")
             obs = sim_env._obs()
             valid = sim_env.get_valid_action_ids()
             return self.critic.value(obs.board, obs.curr_id, obs.next_id, valid)
+
         raise ValueError(f"Unknown rerank_mode: {self.cfg.rerank_mode}")
 
     def _repair_action(self, sim_env, attempts: int) -> Optional[Tuple[int, Tuple[int, int]]]:
@@ -240,28 +243,84 @@ class DiffusionMPCPlanner:
         board, curr_id, next_id = obs
         candidates, mean_masked_fraction = self._sample_candidates(env, board, int(curr_id), int(next_id))
 
-        best_score = -1e18
+        # Track best possible rollout among candidates (for regret)
+        best_candidate_rollout_score = -1e18
+
+        # Default chosen
         best_seq: List[Tuple[int, int]] = []
         best_action_id = self._fallback_action(env)
         best_invalid = 0
         chosen_rollout_score = -1e18
-        best_candidate_rollout_score = -1e18
+        best_score = -1e18  # returned score (meaning depends on mode)
 
-        for seq in candidates:
-            score, rollout_score, rollout, first_aid, invalid_count = self._score_candidate(env, seq)
-            if rollout_score > best_candidate_rollout_score:
-                best_candidate_rollout_score = rollout_score
-            if score > best_score:
-                best_score = score
-                best_seq = rollout
-                best_action_id = first_aid
-                best_invalid = invalid_count
-                chosen_rollout_score = rollout_score
+        if self.cfg.rerank_mode != "hybrid":
+            # Existing behavior: choose candidate with max "score" (heuristic or dqn score_rerank)
+            for seq in candidates:
+                score, rollout_score, rollout, first_aid, invalid_count = self._score_candidate(env, seq)
+
+                if rollout_score > best_candidate_rollout_score:
+                    best_candidate_rollout_score = rollout_score
+
+                if score > best_score:
+                    best_score = score
+                    best_seq = rollout
+                    best_action_id = first_aid
+                    best_invalid = invalid_count
+                    chosen_rollout_score = rollout_score
+
+        else:
+            # HYBRID: choose by rollout_score + alpha * zscore(dqn_value)
+            if self.critic is None:
+                raise ValueError("rerank_mode='hybrid' requires a loaded critic")
+
+            alpha = float(self.cfg.critic_weight)
+
+            cand_rollout_scores: List[float] = []
+            cand_dqn_scores: List[float] = []
+            cand_rollouts: List[List[Tuple[int, int]]] = []
+            cand_first_aids: List[int] = []
+            cand_invalids: List[int] = []
+
+            for seq in candidates:
+                dqn_score, rollout_score, rollout, first_aid, invalid_count = self._score_candidate(env, seq)
+
+                cand_rollout_scores.append(float(rollout_score))
+                cand_dqn_scores.append(float(dqn_score))
+                cand_rollouts.append(rollout)
+                cand_first_aids.append(int(first_aid))
+                cand_invalids.append(int(invalid_count))
+
+                if rollout_score > best_candidate_rollout_score:
+                    best_candidate_rollout_score = rollout_score
+
+            dqn_arr = np.asarray(cand_dqn_scores, dtype=np.float32)
+            if dqn_arr.size:
+                mu = float(dqn_arr.mean())
+                sd = float(dqn_arr.std())
+            else:
+                mu, sd = 0.0, 0.0
+
+            if sd > 1e-6:
+                dqn_z = (dqn_arr - mu) / sd
+            else:
+                dqn_z = np.zeros_like(dqn_arr)
+
+            roll_arr = np.asarray(cand_rollout_scores, dtype=np.float32)
+            hybrid_scores = roll_arr + float(alpha) * dqn_z
+
+            chosen_idx = int(hybrid_scores.argmax()) if hybrid_scores.size else 0
+
+            best_seq = cand_rollouts[chosen_idx]
+            best_action_id = cand_first_aids[chosen_idx]
+            best_invalid = cand_invalids[chosen_idx]
+            chosen_rollout_score = float(cand_rollout_scores[chosen_idx])
+            best_score = float(hybrid_scores[chosen_idx])
 
         if best_candidate_rollout_score <= -1e17:
             best_candidate_rollout_score = 0.0
         if chosen_rollout_score <= -1e17:
             chosen_rollout_score = 0.0
+
         regret = float(best_candidate_rollout_score - chosen_rollout_score)
 
         self.last_plan_stats = {
