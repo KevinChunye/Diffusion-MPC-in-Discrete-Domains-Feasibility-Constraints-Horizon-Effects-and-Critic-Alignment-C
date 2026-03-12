@@ -1,87 +1,120 @@
 # Diffusion-Tetris
 
-Diffusion-based Tetris planning with:
-- offline teacher dataset generation
-- MaskGIT-style denoiser training
-- diffusion + MPC reranking evaluation
-- Lightning-ready pipeline execution and job submission
+Diffusion-based planning for Tetris.
 
-## SSH-First GitHub Setup
+This repository implements a full pipeline for training and evaluating diffusion-style policies for sequential decision-making:
 
-Repository:
-- SSH: `git@github.com:KevinChunye/Diffusion-Tetris.git`
-- HTTPS: `https://github.com/KevinChunye/Diffusion-Tetris`
+- Offline **teacher dataset generation**
+- **MaskGIT-style denoiser** training
+- **Diffusion + MPC reranking** evaluation
+- **Lightning-ready** experiment pipeline and batch job execution
 
-1. Generate an SSH key (if needed):
+---
+
+## Repository Setup
+
+Clone using SSH:
+
 ```bash
-ssh-keygen -t ed25519 -C "your_email@example.com"
+git clone git@github.com:KevinChunye/Diffusion-Tetris.git
+cd Diffusion-Tetris
 ```
 
-2. Add key to agent:
+If you do not yet have an SSH key:
+
 ```bash
+ssh-keygen -t ed25519
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_ed25519
 ```
 
-3. Add key to GitHub:
+Add the public key to GitHub:
+
 ```bash
 cat ~/.ssh/id_ed25519.pub
 ```
-Copy into GitHub -> Settings -> SSH and GPG keys.
 
-4. Verify SSH auth:
+Then verify authentication:
+
 ```bash
 ssh -T git@github.com
 ```
 
-5. Clone with SSH:
-```bash
-git clone git@github.com:KevinChunye/Diffusion-Tetris.git
-```
+---
 
-If your local clone currently uses HTTPS, switch it to SSH:
-```bash
-git remote set-url origin git@github.com:KevinChunye/Diffusion-Tetris.git
-git remote -v
-```
+## Lightning Studio Setup
 
-## Lightning Studio: Clone via SSH
+Clone the repository inside Lightning Studio:
 
-Inside Lightning Studio:
 ```bash
 bash scripts/lightning_clone_ssh.sh
 ```
 
-Optional environment overrides:
-- `DIFFUSION_TETRIS_REPO_SSH`
-- `DIFFUSION_TETRIS_REPO_DIR`
+Optional environment variables:
 
-Studio startup automation:
-- `lightning_studio/on_start.sh` initializes known_hosts, clones/pulls repo, and creates artifact root.
+```
+DIFFUSION_TETRIS_REPO_SSH
+DIFFUSION_TETRIS_REPO_DIR
+```
 
-## Lightning Artifacts and Pipeline
+Startup automation is handled by:
 
-Set persistent artifact root (recommended):
+```
+lightning_studio/on_start.sh
+```
+
+This script:
+
+- initializes SSH known hosts  
+- clones or updates the repo  
+- prepares the artifact directory  
+
+---
+
+## Experiment Pipeline
+
+Set a persistent artifact directory:
+
 ```bash
 export TETRIS_ARTIFACT_ROOT=/teamspace/studios/tetris_artifacts
 mkdir -p "$TETRIS_ARTIFACT_ROOT"
 ```
 
-Run stages:
+Run the pipeline stages:
+
 ```bash
-python -m experiments.pipeline dataset --config configs/dataset_gen.yaml --output_dir runs/dataset/ds_v1 --resume true
-python -m experiments.pipeline train   --config configs/diffusion_train.yaml --output_dir runs/train/tr_v1 --resume true
-python -m experiments.pipeline eval    --config configs/eval_run.yaml --output_dir runs/eval/ev_v1 --resume true
+python -m experiments.pipeline dataset \
+  --config configs/dataset_gen.yaml \
+  --output_dir runs/dataset/ds_v1 \
+  --resume true
 ```
 
-Pipeline behavior:
-- relative `output_dir` resolves under `TETRIS_ARTIFACT_ROOT` (when set)
-- stage resume/skip is supported
-- stage `manifest.json` is written
+```bash
+python -m experiments.pipeline train \
+  --config configs/diffusion_train.yaml \
+  --output_dir runs/train/tr_v1 \
+  --resume true
+```
+
+```bash
+python -m experiments.pipeline eval \
+  --config configs/eval_run.yaml \
+  --output_dir runs/eval/ev_v1 \
+  --resume true
+```
+
+Pipeline features:
+
+- automatic artifact management  
+- resumable stages  
+- stage manifests (`manifest.json`)  
+
+---
 
 ## Batch Job Submission
 
-1. Create run plan:
+Generate a run plan:
+
 ```bash
 python -m experiments.tuner \
   --index_path runs/index.csv \
@@ -92,7 +125,8 @@ python -m experiments.tuner \
   --artifact_root "$TETRIS_ARTIFACT_ROOT"
 ```
 
-2. Submit via Lightning CLI:
+Submit jobs via Lightning:
+
 ```bash
 python -m experiments.submit_lightning_jobs \
   --plan_path runs/run_plans/<timestamp>_plan.yaml \
@@ -102,9 +136,18 @@ python -m experiments.submit_lightning_jobs \
   --gpu <gpu>
 ```
 
-Dry-run:
+Dry run:
+
 ```bash
-python -m experiments.submit_lightning_jobs --plan_path runs/run_plans/<timestamp>_plan.yaml --dry_run
+python -m experiments.submit_lightning_jobs \
+  --plan_path runs/run_plans/<timestamp>_plan.yaml \
+  --dry_run
 ```
 
-See [Lightning runbook](notes/lightning_runbook.md) for full workflow.
+---
+
+## Documentation
+
+Additional workflow details are available in:
+
+`notes/lightning_runbook.md`
