@@ -1,4 +1,5 @@
-# Diffusion-Tetris
+# Diffusion-Tetris, code for Diffusion-MPC in Discrete Domains: Feasibility Constraints, Horizon Effects, and Critic Alignment: Case study with Tetris
+
 
 Diffusion-based planning for Tetris.
 
